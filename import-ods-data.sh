@@ -1,4 +1,11 @@
 export PGPASSWORD=$1;
+
+createdb -h $2 -U postgres "EdFi_Admin"
+createdb -h $2 -U postgres "EdFi_Security"
+createdb -h $2 -U postgres "EdFi_Ods_2023"
+createdb -h $2 -U postgres "EdFi_Ods_2022"
+createdb -h $2 -U postgres "EdFi_Ods_2021"
+
 psql -h $2 -U postgres  'EdFi_Admin' < artifacts/edfi-ods-admin/EdFi_Admin.sql;
 psql -h $2 -U postgres  'EdFi_Security' < artifacts/edfi-ods-security/EdFi_Security.sql;
 psql -h $2 -U postgres  'EdFi_Ods_2023' < artifacts/edfi-ods-minimal/EdFi.Ods.Minimal.Template.TPDM.Core.sql;
