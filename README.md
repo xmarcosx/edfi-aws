@@ -142,8 +142,8 @@ Seeding the ODS
 # connect via ssh
 ssh -i "AwsKeyPair.pem" ec2-user@XXX.XXX.XXX.XXX;
 
-# install psql cli
-sudo yum install postgresql;
+# install psql and git
+sudo yum install postgresql git;
 
 # clone this git repo to vm
 git clone https://github.com/xmarcosx/edfi-aws.git;
