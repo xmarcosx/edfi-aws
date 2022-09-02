@@ -137,6 +137,32 @@ aws rds create-db-instance \
     --no-multi-az;
 ```
 
+Seeding the ODS
+```sh
+# connect via ssh
+ssh -i "AwsKeyPair.pem" ec2-user@XXX.XXX.XXX.XXX;
+
+# install psql cli
+sudo yum install postgresql;
+
+# clone this git repo to vm
+git clone https://github.com/xmarcosx/edfi-aws.git;
+
+# download and import ed-fi db templates
+cd edfi-aws;
+bash init.sh;
+
+# PostgreSQL full server name example: edfi-ods.XXXXXX.us-east-1.rds.amazonaws.com
+bash import-ods-data.sh <POSTGRESPASSWORD> <POSTGRESQL FULL SERVER NAME> # DEV TODO: replace with postgres password
+
+# shutdown vm
+sudo shutdown;
+
+#psql -h edfi-ods.XXXXXX.us-east-1.rds.amazonaws.com -U postgres;
+
+
+```
+
 Clean up
 ```sh
 aws ec2 delete-security-group --group-id <SEC_GROUP_ID>;
