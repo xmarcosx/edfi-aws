@@ -10,12 +10,18 @@ VPC, subnets, and routing tables
 ```sh
 # set environment variables
 AWS_DEFAULT_REGION=us-east-1;
-AWS_VPC_ID="";
-AWS_PUBLIC_SUBNET="";
-AWS_PRIVATE_SUBNET_1="";
-AWS_PRIVATE_SUBNET_2="";
-AWS_IGW_ID="";
-AWS_ROUTE_TABLE_ID="";
+AWS_VPC_ID="vpc-";
+AWS_PUBLIC_SUBNET="subnet-";
+AWS_PRIVATE_SUBNET_1="subnet-";
+AWS_PRIVATE_SUBNET_2="subnet-";
+AWS_IGW_ID="igw-";
+AWS_ROUTE_TABLE_ID="rtb-";
+AWS_PUBLIC_SECURITY_GROUP="sg-";
+AWS_EC2_INSTANCE_ID="i-";
+AWS_ODS_SECURITY_GROUP="sg-";
+AWS_API_REPOSITORY_URI="XXXXXXX.dkr.ecr.us-east-1.amazonaws.com/edfi-api";
+
+EDFI_ODS_PASSWORD="XXXXXXXXX";
 
 
 # create vpc (virtual private cloud)
@@ -41,15 +47,12 @@ AWS_ROUTE_TABLE_ID=$(aws ec2 create-route-table --vpc-id $AWS_VPC_ID --query Rou
 
 aws ec2 create-route --route-table-id $AWS_ROUTE_TABLE_ID --destination-cidr-block 0.0.0.0/0 --gateway-id $AWS_IGW_ID;
 
-# run command below and note the subnet id of the first subnet
-aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" --query "Subnets[*].{ID:SubnetId,CIDR:CidrBlock}";
-
 # associate route table with subnet
 # this turns subnet into a public subnet
-aws ec2 associate-route-table  --subnet-id <SUBNET_ID> --route-table-id $AWS_ROUTE_TABLE_ID;
+aws ec2 associate-route-table  --subnet-id $AWS_PUBLIC_SUBNET --route-table-id $AWS_ROUTE_TABLE_ID;
 
 # instances launched in subnet will automatically receive public ip
-aws ec2 modify-subnet-attribute --subnet-id <SUBNET_ID> --map-public-ip-on-launch;
+aws ec2 modify-subnet-attribute --subnet-id $AWS_PUBLIC_SUBNET --map-public-ip-on-launch;
 ```
 
 EC2 jumpbox
@@ -67,11 +70,9 @@ aws ec2 create-security-group \
     --description "Security group for SSH access" \
     --vpc-id $AWS_VPC_ID;
 
-PUBLIC_SECURITY_GROUP=XXXXXXX;
-
 # allow ssh access from current ip address
 aws ec2 authorize-security-group-ingress \
-    --group-id <SEC_GROUP_ID> \
+    --group-id $AWS_PUBLIC_SECURITY_GROUP \
     --protocol tcp \
     --port 22 \
     --cidr $(curl http://checkip.amazonaws.com)/32;
@@ -83,16 +84,13 @@ aws ec2 run-instances \
     --count 1 \
     --instance-type t2.micro \
     --key-name MyKeyPair \
-    --security-group-ids <SEC_GROUP_ID> \
-    --subnet-id <SUBNET_ID>;
+    --security-group-ids $AWS_PUBLIC_SECURITY_GROUP \
+    --subnet-id $AWS_PUBLIC_SUBNET;
 
 # retrieve public ip address
 aws ec2 describe-instances \
-    --instance-id <EC2_INSTANCE_ID> \
+    --instance-id $AWS_EC2_INSTANCE_ID \
     --query "Reservations[*].Instances[*].{State:State.Name,Address:PublicIpAddress}";
-
-# connect via ssh
-ssh -i "AwsKeyPair.pem" ec2-user@XXX.XXX.XXX.XXX;
 ```
 
 
@@ -105,13 +103,11 @@ aws ec2 create-security-group \
     --description "Security group for PostgreSQL access" \
     --vpc-id $AWS_VPC_ID;
 
-PRIVATE_SECURITY_GROUP=XXXXXXXXX;
-
 aws ec2 authorize-security-group-ingress \
-    --group-id $PRIVATE_SECURITY_GROUP \
+    --group-id $AWS_ODS_SECURITY_GROUP \
     --protocol tcp \
     --port 5432 \
-    --source-group $PUBLIC_SECURITY_GROUP;
+    --source-group $AWS_PUBLIC_SECURITY_GROUP;
 
 aws rds create-db-subnet-group \
     --db-subnet-group-name db-subnet-group \
@@ -123,10 +119,10 @@ aws rds create-db-cluster \
     --engine aurora-postgresql \
     --engine-version 11.16 \
     --master-username postgres \
-    --master-user-password S3cur3Passwd \
+    --master-user-password $EDFI_ODS_PASSWORD \
     --db-subnet-group-name db-subnet-group \
     --backup-retention-period 7 \
-    --vpc-security-group-ids $PRIVATE_SECURITY_GROUP;
+    --vpc-security-group-ids $AWS_ODS_SECURITY_GROUP;
 
 aws rds create-db-instance \
     --db-cluster-identifier edfi-ods-cluster \
@@ -156,19 +152,25 @@ bash init.sh;
 bash import-ods-data.sh <POSTGRESPASSWORD> <POSTGRESQL FULL SERVER NAME> # DEV TODO: replace with postgres password
 
 # shutdown vm
-sudo shutdown;
-
-#psql -h edfi-ods.XXXXXX.us-east-1.rds.amazonaws.com -U postgres;
-
-
+sudo shutdown now;
 ```
 
-Clean up
+Push Docker image to ECR
 ```sh
-aws ec2 delete-security-group --group-id <SEC_GROUP_ID>;
-aws ec2 delete-subnet --subnet-id <SUBNET_ID>;
-aws ec2 delete-route-table --route-table-id $AWS_ROUTE_TABLE_ID;
-aws ec2 detach-internet-gateway --internet-gateway-id $AWS_IGW_ID --vpc-id $AWS_VPC_ID;
-aws ec2 delete-internet-gateway --internet-gateway-id $AWS_IGW_ID;
-aws ec2 delete-vpc --vpc-id $AWS_VPC_ID;
+# note repository uri and save to AWS_API_REPOSITORY_URI
+aws ecr create-repository \
+    --repository-name edfi-api \
+    --image-scanning-configuration scanOnPush=true \
+    --region $AWS_DEFAULT_REGION;
+
+docker build -t edfi-api edfi-api/.;
+
+aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin XXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com;
+docker tag edfi-api:latest $AWS_API_REPOSITORY_URI;
+docker push $AWS_API_REPOSITORY_URI;
+```
+
+Ed-Fi Web API on App Runner
+```sh
+aws apprunner create-service --cli-input-json file://api.json;
 ```
