@@ -26,9 +26,12 @@ brew install awscli;
 aws configure;
 ```
 
-### Windows
 
-* [AWS cli download](https://awscli.amazonaws.com/AWSCLIV2.msi)
+
+# Table of Contents  
+* [Environment variables](#environment-variables)
+* [Networking](#networking)
+* [Jumpbox](#jumpbox)
 
 
 ## Environment variables
@@ -82,7 +85,7 @@ AWS_PRIVATE_SUBNET_1=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability
 AWS_PRIVATE_SUBNET_2=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1c --cidr-block 10.0.2.0/24 --query Subnet.SubnetId --output text);
 ```
 
-You've created three new subnets which are viewable [here](https://us-east-1.console.aws.amazon.com/vpc/home?region=us-east-1#subnets:) in your AWS console, but at this point they are all private. Let's make one of them public.
+You've created three new subnets which are viewable at the URL below, but at this point they are all private. Let's make one of them public.
 
 https://us-east-1.console.aws.amazon.com/vpc/home?region=us-east-1#subnets:
 
@@ -93,6 +96,8 @@ An internet gateway allows communication between your VPC and the internet. It e
 Run the commands below to create an internet gateway and attach it to your VPC.
 ```sh
 AWS_IGW_ID=$(aws ec2 create-internet-gateway --query InternetGateway.InternetGatewayId --output text);
+```
+```sh
 aws ec2 attach-internet-gateway --vpc-id $AWS_VPC_ID --internet-gateway-id $AWS_IGW_ID;
 ```
 
@@ -101,19 +106,28 @@ We are now going to create a route table. A route table contains a set of rules,
 Run the commands below to create a route table, route, associate the route table with the first subnet you created, and finally to configure the subnet to automatically assignn public ip addresses to any resources created in it.
 ```sh
 AWS_ROUTE_TABLE_ID=$(aws ec2 create-route-table --vpc-id $AWS_VPC_ID --query RouteTable.RouteTableId --output text);
+```
+```sh
 aws ec2 create-route --route-table-id $AWS_ROUTE_TABLE_ID --destination-cidr-block 0.0.0.0/0 --gateway-id $AWS_IGW_ID;
+```
+```sh
 aws ec2 associate-route-table  --subnet-id $AWS_PUBLIC_SUBNET --route-table-id $AWS_ROUTE_TABLE_ID;
+```
+```sh
 aws ec2 modify-subnet-attribute --subnet-id $AWS_PUBLIC_SUBNET --map-public-ip-on-launch;
 ```
+
 
 ## Jumpbox
 Later on, we will create a PostgreSQL RDS (Relational Database Service) instance that will serve as your Ed-Fi ODS. This will exist in a private subnet and will not be accessible from the internet. However, we will need to connect to it initially so that we can seed it with the various tables required by Ed-Fi. To do that, we will create an EC2 VM (virtual machine) that will serve as our jumpbox. This Linux VM will be publicly accessible from the internet allowing us to SSH into it and from there, connect to our PostgreSQL instance.
 
 We will authenticate with the VM using a key pair. A key pair, consisting of a public key and a private key, is a set of security credentials that you use to prove your identity when connecting to an Amazon EC2 instance.
 
-Run the command below to create a new key pair. This will create the key pair in AWS and store it in a .pem file on your machine. You will also run a `chmod` command to restrict access to it.
+Run the command below to create a new key pair. This will create the key pair in AWS and store the private key in a .pem file on your machine. You will also run a `chmod` command to restrict access to it.
 ```sh
 aws ec2 create-key-pair --key-name MyKeyPair --query "KeyMaterial" --output text > AwsKeyPair.pem;
+```
+```sh
 chmod 400 AwsKeyPair.pem;
 ```
 
@@ -121,11 +135,8 @@ We are now going to create a security group. A security group controls the traff
 
 Run 
 ```sh
-aws ec2 create-security-group \
-    --group-name SSHAccess \
-    --description "Security group for SSH access" \
-    --vpc-id $AWS_VPC_ID;
-AWS_PUBLIC_SECURITY_GROUP="";
+AWS_PUBLIC_SECURITY_GROUP=$(aws ec2 create-security-group --group-name SSHAccess --description "Security group for SSH access" --vpc-id $AWS_VPC_ID --query GroupId --output text);
+echo $AWS_PUBLIC_SECURITY_GROUP;
 ```
 
 ```sh
