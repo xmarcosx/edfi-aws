@@ -274,19 +274,33 @@ Go ahead and shutdown your VM to reduce billing charges.
 sudo shutdown -H now;
 ```
 
+You have successfully deployed your Ed-Fi ODS! Let's move on to the Ed-Fi API.
+
+
 ### Ed-Fi API
+
+
 Push Docker image to ECR
 ```sh
-# note repository uri and save to AWS_API_REPOSITORY_URI
-aws ecr create-repository \
+AWS_API_REPOSITORY_URI=$(aws ecr create-repository \
     --repository-name edfi-api \
     --image-scanning-configuration scanOnPush=true \
-    --region $AWS_DEFAULT_REGION;
+    --region $AWS_DEFAULT_REGION \
+    --query "repository.repositoryUri" --output text);
+echo $AWS_API_REPOSITORY_URI;
+```
 
+From within your `edfi-aws` folder.
+```sh
 docker build -t edfi-api edfi-api/.;
-
+```
+```sh
 aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin XXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com;
+```
+```sh
 docker tag edfi-api:latest $AWS_API_REPOSITORY_URI;
+```
+```sh
 docker push $AWS_API_REPOSITORY_URI;
 ```
 
