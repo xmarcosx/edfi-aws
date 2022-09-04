@@ -59,7 +59,7 @@ EDFI_ODS_PASSWORD="XXXXXXXXX";
 Let's start by creating a new VPC (Virtual Private Cloud), several subnets, and other pieces of networking infrastructure. A VPC is a virtual network dedicated to your AWS account. Within a VPC are one or more subnets. A subnet is a range of IP addresses in your VPC. You launch AWS resources, such as Amazon EC2 instances, into your subnets. You can connect a subnet to the internet, and route traffic to and from your subnets using route tables.
 
 ### VPC
-Run the command below to create a vpc and automatically store its id in `AWS_VPC_ID`
+Copy and paste the command below to create a vpc and automatically store its id in `AWS_VPC_ID`
 ```sh
 AWS_VPC_ID=$(aws ec2 create-vpc --cidr-block 10.0.0.0/16 --query Vpc.VpcId --output text);
 ```
@@ -69,25 +69,24 @@ Note, if you run `echo $AWS_VPC_ID`, you will see the env variable, `AWS_VPC_ID`
 ### Subnets
 You will create three subnets in your VPC. Two will be private and one will be public. It is important that we don't expose all resources to the public internet. For example, exposing your RDS instance that runs your Ed-Fi ODS to the public internet would be a bad idea.
 
-Run the command below to create your first subnet. This will return information on the newly created subnet. Copy the `SubnetId` value and run the 2nd command to store it in your `AWS_PUBLIC_SUBNET` variable.
+Copy and paste the commands below to create your subnets.
 ```sh
-aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1a --cidr-block 10.0.0.0/24;
-AWS_PUBLIC_SUBNET="subnet-XXXXXXXXX";
+AWS_PUBLIC_SUBNET=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1a --cidr-block 10.0.0.0/24 --query Subnet.SubnetId --output text);
 ```
 
-Create two more subnets, assigning the ids to `AWS_PRIVATE_SUBNET_1` and `AWS_PRIVATE_SUBNET_2`.
 ```sh
-aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1b --cidr-block 10.0.1.0/24;
-AWS_PRIVATE_SUBNET_1="subnet-XXXXXXXXX";
+AWS_PRIVATE_SUBNET_1=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1b --cidr-block 10.0.1.0/24 --query Subnet.SubnetId --output text);
+```
 
-aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1c --cidr-block 10.0.2.0/24;
-AWS_PRIVATE_SUBNET_2="subnet-XXXXXXXXX";
+```sh
+AWS_PRIVATE_SUBNET_2=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1c --cidr-block 10.0.2.0/24 --query Subnet.SubnetId --output text);
 ```
 
 You've created three new subnets, but at this point they are all private. Let's make one of them public.
 
+
 ### Internet gateway
-An internet gateway allows communication between your VPC and the internet. It enables resources in your public subnets (such as EC2 instances) to connect to the internet if the resource has a public ip address.
+An internet gateway allows communication between your VPC and the internet. It enables resources in your public subnets (such as EC2 instances) to connect to the internet if they have a public ip address.
 
 Run the commands below to create an internet gateway and attach it to your VPC.
 ```sh
@@ -95,43 +94,47 @@ AWS_IGW_ID=$(aws ec2 create-internet-gateway --query InternetGateway.InternetGat
 aws ec2 attach-internet-gateway --vpc-id $AWS_VPC_ID --internet-gateway-id $AWS_IGW_ID;
 ```
 
+We are now going to create a route table. A route table contains a set of rules, called routes, that determine where network traffic from your subnet or gateway is directed. If a subnet is associated with a route table that has a route to an internet gateway, it's known as a public subnet. If a subnet is associated with a route table that does not have a route to an internet gateway, it's known as a private subnet.
 
+Run the commands below to create a route table, route, associate the route table with the first subnet you created, and finally to configure the subnet to automatically assignn public ip addresses to any resources created in it.
 ```sh
-# crete route table for vpc
 AWS_ROUTE_TABLE_ID=$(aws ec2 create-route-table --vpc-id $AWS_VPC_ID --query RouteTable.RouteTableId --output text);
-
 aws ec2 create-route --route-table-id $AWS_ROUTE_TABLE_ID --destination-cidr-block 0.0.0.0/0 --gateway-id $AWS_IGW_ID;
-
-# associate route table with subnet
-# this turns subnet into a public subnet
 aws ec2 associate-route-table  --subnet-id $AWS_PUBLIC_SUBNET --route-table-id $AWS_ROUTE_TABLE_ID;
-
-# instances launched in subnet will automatically receive public ip
 aws ec2 modify-subnet-attribute --subnet-id $AWS_PUBLIC_SUBNET --map-public-ip-on-launch;
 ```
 
-EC2 jumpbox
+## Jumpbox
+Later on, we will create a PostgreSQL RDS (Relational Database Service) instance that will serve as your Ed-Fi ODS. This will exist in a private subnet and will not be accessible from the internet. However, we will need to connect to it initially so that we can seed it with the various tables required by Ed-Fi. To do that, we will create an EC2 VM (virtual machine) that will serve as our jumpbox. This Linux VM will be publicly accessible from the internet allowing us to SSH into it and from there, connect to our PostgreSQL instance.
+
+We will authenticate with the VM using a key pair. A key pair, consisting of a public key and a private key, is a set of security credentials that you use to prove your identity when connecting to an Amazon EC2 instance.
+
+Run the command below to create a new key pair. This will create the key pair in AWS and store it in a .pem file on your machine. You will also run a `chmod` command to restrict access to it.
 ```sh
-# create ssh key file
 aws ec2 create-key-pair --key-name MyKeyPair --query "KeyMaterial" --output text > AwsKeyPair.pem;
-
-# restrict access to file
 chmod 400 AwsKeyPair.pem;
+```
 
-# create security group in vpc
-# take note of the security group id
+We are now going to create a security group. A security group controls the traffic that is allowed to reach and leave the resources that it is associated with. We are going to create a security group that allows access to port 22 when the traffic originates from your public ip address.
+
+Run 
+```sh
 aws ec2 create-security-group \
     --group-name SSHAccess \
     --description "Security group for SSH access" \
     --vpc-id $AWS_VPC_ID;
+AWS_PUBLIC_SECURITY_GROUP="";
+```
 
-# allow ssh access from current ip address
+```sh
 aws ec2 authorize-security-group-ingress \
     --group-id $AWS_PUBLIC_SECURITY_GROUP \
     --protocol tcp \
     --port 22 \
     --cidr $(curl http://checkip.amazonaws.com)/32;
+```
 
+```sh
 # create ec2 vm
 # take note of the instance id
 aws ec2 run-instances \
