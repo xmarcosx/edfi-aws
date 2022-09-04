@@ -1,5 +1,5 @@
 # Ed-Fi on AWS
-The AWS CLI commands below will deploy the following Ed-Fi components on AWS.
+The AWS CLI commands below will deploy the following Ed-Fi components on AWS. This installer uses the AWS CLI in place of infrastructure as code solutions such as Terraform because the purpose of the installer is to explain each step along the way. Take your time and read through each section to ensure you understand each component of the Ed-Fi platform on AWS.
 
 * Ed-Fi API and ODS Suite 3 v5.3
 * Ed-Fi Admin App v2.3.2
@@ -7,7 +7,6 @@ The AWS CLI commands below will deploy the following Ed-Fi components on AWS.
 
 ![AWS](/img/aws.png)
 
-This document uses the AWS CLI in place of infrastructure as code solutions such as Terraform because the purpose of the installer is to explain each step along the way.
 
 ## Costs
 | Component             | AWS product | Configuration                                   | Yearly cost            |
@@ -16,22 +15,30 @@ This document uses the AWS CLI in place of infrastructure as code solutions such
 | Ed-Fi API             | App Runner                       | 2 vCPU,<br>4 GB of memory                                                         |  |
 | Ed-Fi Admin App       | App Runner                       | 1 vCPU,<br>2 GB of memory                                                         |  |
 
+
 ## Prerequisites
-MacOS
+You will need both the AWS cli and Docker Desktop installed on your machine.
+
+### MacOS
 ```sh
+brew install docker;
 brew install awscli;
 aws configure;
 ```
 
+### Windows
+
+* [AWS cli download](https://awscli.amazonaws.com/AWSCLIV2.msi)
+
 
 ## Environment variables
-Throughout the installer, you will be creating resources in AWS. Those resources are given unique ids which you will store in various environment variables to be used in future commands. Run the first command below to create an environment variable `AWS_DEFAULT_REGION` that is set to use `us-east-1` as the default region for new resources in AWS.
+Throughout the installer, you will be creating resources in AWS. Those resources are given unique ids which you will store in various environment variables to be used in future commands. Run the first command below to create an environment variable `AWS_DEFAULT_REGION` that is set to use `us-east-1`. This will be your default region for new resources in AWS.
 
 ```sh
 AWS_DEFAULT_REGION=us-east-1;
 ```
 
-View the list of environment variables below as your "scratchpad." As you run through the steps below, you will be asked to store various values as environment variables.
+View the list of environment variables below as your "scratchpad." As you run through the steps below, you will be asked to store various values as environment variables. Come back up here and update the values.
 ```sh
 AWS_VPC_ID="vpc-";
 AWS_PUBLIC_SUBNET="subnet-";
@@ -52,31 +59,44 @@ EDFI_ODS_PASSWORD="XXXXXXXXX";
 Let's start by creating a new VPC (Virtual Private Cloud), several subnets, and other pieces of networking infrastructure. A VPC is a virtual network dedicated to your AWS account. Within a VPC are one or more subnets. A subnet is a range of IP addresses in your VPC. You launch AWS resources, such as Amazon EC2 instances, into your subnets. You can connect a subnet to the internet, and route traffic to and from your subnets using route tables.
 
 ### VPC
-Run the command below to create a vpc and store its id in `AWS_VPC_ID`
+Run the command below to create a vpc and automatically store its id in `AWS_VPC_ID`
 ```sh
 AWS_VPC_ID=$(aws ec2 create-vpc --cidr-block 10.0.0.0/16 --query Vpc.VpcId --output text);
 ```
 
+Note, if you run `echo $AWS_VPC_ID`, you will see the env variable, `AWS_VPC_ID`, has been set to the VPC ID of the newly created VPC.
+
 ### Subnets
-The command 
+You will create three subnets in your VPC. Two will be private and one will be public. It is important that we don't expose all resources to the public internet. For example, exposing your RDS instance that runs your Ed-Fi ODS to the public internet would be a bad idea.
+
+Run the command below to create your first subnet. This will return information on the newly created subnet. Copy the `SubnetId` value and run the 2nd command to store it in your `AWS_PUBLIC_SUBNET` variable.
 ```sh
-# create subnets
-# public subnet
 aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1a --cidr-block 10.0.0.0/24;
-# private subnet 1
-aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1b --cidr-block 10.0.1.0/24;
-# private subnet 2
-aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1c --cidr-block 10.0.2.0/24;
+AWS_PUBLIC_SUBNET="subnet-XXXXXXXXX";
 ```
 
-Internet gateway
+Create two more subnets, assigning the ids to `AWS_PRIVATE_SUBNET_1` and `AWS_PRIVATE_SUBNET_2`.
 ```sh
-# create internet gateway as a first step to making a subnet public
+aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1b --cidr-block 10.0.1.0/24;
+AWS_PRIVATE_SUBNET_1="subnet-XXXXXXXXX";
+
+aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1c --cidr-block 10.0.2.0/24;
+AWS_PRIVATE_SUBNET_2="subnet-XXXXXXXXX";
+```
+
+You've created three new subnets, but at this point they are all private. Let's make one of them public.
+
+### Internet gateway
+An internet gateway allows communication between your VPC and the internet. It enables resources in your public subnets (such as EC2 instances) to connect to the internet if the resource has a public ip address.
+
+Run the commands below to create an internet gateway and attach it to your VPC.
+```sh
 AWS_IGW_ID=$(aws ec2 create-internet-gateway --query InternetGateway.InternetGatewayId --output text);
-
-# attach gateway to vpc
 aws ec2 attach-internet-gateway --vpc-id $AWS_VPC_ID --internet-gateway-id $AWS_IGW_ID;
+```
 
+
+```sh
 # crete route table for vpc
 AWS_ROUTE_TABLE_ID=$(aws ec2 create-route-table --vpc-id $AWS_VPC_ID --query RouteTable.RouteTableId --output text);
 
