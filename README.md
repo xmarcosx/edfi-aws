@@ -1,15 +1,38 @@
-# edfi-aws
+# Ed-Fi on AWS
+The AWS CLI commands below will deploy the following Ed-Fi components on AWS.
 
+* Ed-Fi API and ODS Suite 3 v5.3
+* Ed-Fi Admin App v2.3.2
+* TPDM Core v1.1.1
+
+![AWS](/img/aws.png)
+
+This document uses the AWS CLI in place of infrastructure as code solutions such as Terraform because the purpose of the installer is to explain each step along the way.
+
+## Costs
+| Component             | AWS product | Configuration                                   | Yearly cost            |
+| --------------------- | -------------------- | ----------------------------------------------- | ---------------------- |
+| Ed-Fi ODS             | Aurora PostgreSQL on RDS            | PostgreSQL 11,<br>2 vCPUs,<br>4 GB of memory      |               |
+| Ed-Fi API             | App Runner                       | 2 vCPU,<br>4 GB of memory                                                         |  |
+| Ed-Fi Admin App       | App Runner                       | 1 vCPU,<br>2 GB of memory                                                         |  |
+
+## Prerequisites
 MacOS
 ```sh
 brew install awscli;
 aws configure;
 ```
 
-VPC, subnets, and routing tables
+
+## Environment variables
+Throughout the installer, you will be creating resources in AWS. Those resources are given unique ids which you will store in various environment variables to be used in future commands. Run the first command below to create an environment variable `AWS_DEFAULT_REGION` that is set to use `us-east-1` as the default region for new resources in AWS.
+
 ```sh
-# set environment variables
 AWS_DEFAULT_REGION=us-east-1;
+```
+
+View the list of environment variables below as your "scratchpad." As you run through the steps below, you will be asked to store various values as environment variables.
+```sh
 AWS_VPC_ID="vpc-";
 AWS_PUBLIC_SUBNET="subnet-";
 AWS_PRIVATE_SUBNET_1="subnet-";
@@ -22,19 +45,32 @@ AWS_ODS_SECURITY_GROUP="sg-";
 AWS_API_REPOSITORY_URI="XXXXXXX.dkr.ecr.us-east-1.amazonaws.com/edfi-api";
 
 EDFI_ODS_PASSWORD="XXXXXXXXX";
+```
 
 
-# create vpc (virtual private cloud)
+## Networking
+Let's start by creating a new VPC (Virtual Private Cloud), several subnets, and other pieces of networking infrastructure. A VPC is a virtual network dedicated to your AWS account. Within a VPC are one or more subnets. A subnet is a range of IP addresses in your VPC. You launch AWS resources, such as Amazon EC2 instances, into your subnets. You can connect a subnet to the internet, and route traffic to and from your subnets using route tables.
+
+### VPC
+Run the command below to create a vpc and store its id in `AWS_VPC_ID`
+```sh
 AWS_VPC_ID=$(aws ec2 create-vpc --cidr-block 10.0.0.0/16 --query Vpc.VpcId --output text);
+```
 
-# create two subnets in vpc
+### Subnets
+The command 
+```sh
+# create subnets
 # public subnet
 aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1a --cidr-block 10.0.0.0/24;
 # private subnet 1
 aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1b --cidr-block 10.0.1.0/24;
 # private subnet 2
 aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1c --cidr-block 10.0.2.0/24;
+```
 
+Internet gateway
+```sh
 # create internet gateway as a first step to making a subnet public
 AWS_IGW_ID=$(aws ec2 create-internet-gateway --query InternetGateway.InternetGatewayId --output text);
 
@@ -42,7 +78,6 @@ AWS_IGW_ID=$(aws ec2 create-internet-gateway --query InternetGateway.InternetGat
 aws ec2 attach-internet-gateway --vpc-id $AWS_VPC_ID --internet-gateway-id $AWS_IGW_ID;
 
 # crete route table for vpc
-# A route table contains a set of rules, called routes, that determine where network traffic from your subnet or gateway is directed.
 AWS_ROUTE_TABLE_ID=$(aws ec2 create-route-table --vpc-id $AWS_VPC_ID --query RouteTable.RouteTableId --output text);
 
 aws ec2 create-route --route-table-id $AWS_ROUTE_TABLE_ID --destination-cidr-block 0.0.0.0/0 --gateway-id $AWS_IGW_ID;
@@ -152,7 +187,7 @@ bash init.sh;
 bash import-ods-data.sh <POSTGRESPASSWORD> <POSTGRESQL FULL SERVER NAME> # DEV TODO: replace with postgres password
 
 # shutdown vm
-sudo shutdown now;
+sudo shutdown -H now;
 ```
 
 Push Docker image to ECR
