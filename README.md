@@ -32,6 +32,7 @@ aws configure;
 * [Environment variables](#environment-variables)
 * [Networking](#networking)
 * [Jumpbox](#jumpbox)
+* [Amazon RDS](#amazon-rds)
 
 
 ## Environment variables
@@ -148,10 +149,8 @@ aws ec2 authorize-security-group-ingress \
     --cidr $(curl http://checkip.amazonaws.com)/32;
 ```
 
-
+Run the command below to create your VM. This VM has 1 vCPU and 1 GB of RAM, and runs Amazon's linux distro.
 ```sh
-# create ec2 vm
-# take note of the instance id
 AWS_EC2_INSTANCE_ID=$(aws ec2 run-instances \
     --image-id ami-a4827dc9 \
     --count 1 \
@@ -163,29 +162,32 @@ AWS_EC2_INSTANCE_ID=$(aws ec2 run-instances \
 echo $AWS_EC2_INSTANCE_ID;
 ```
 
-```sh
+<!-- ```sh
 # retrieve public ip address
 aws ec2 describe-instances \
     --instance-id $AWS_EC2_INSTANCE_ID \
     --query "Reservations[*].Instances[*].{State:State.Name,Address:PublicIpAddress}";
+``` -->
+
+
+### Amazon RDS
+We are going to use Aurora PostgreSQL on Amazon RDS for our Ed-Fi ODS. Using a managed service for our ODS is going to provide us with automated backups, automatic minor version upgrades, and flexible compute, memory, and storage.
+
+Before we create the RDS instance, we are going to create a security group. This security group will authorize access to port 5432, the default port for PostgreSQL.
+```sh
+AWS_ODS_SECURITY_GROUP=$(aws ec2 create-security-group --group-name postgresql-access --description "Security group for PostgreSQL access" --vpc-id $AWS_VPC_ID --query GroupId --output text);
+echo $AWS_ODS_SECURITY_GROUP;
 ```
 
-
-RDS
 ```sh
-# create security group for private db instance
-# take note of the security group id
-aws ec2 create-security-group \
-    --group-name postgresql-access \
-    --description "Security group for PostgreSQL access" \
-    --vpc-id $AWS_VPC_ID;
-
 aws ec2 authorize-security-group-ingress \
     --group-id $AWS_ODS_SECURITY_GROUP \
     --protocol tcp \
     --port 5432 \
     --source-group $AWS_PUBLIC_SECURITY_GROUP;
+```
 
+```sh
 aws rds create-db-subnet-group \
     --db-subnet-group-name db-subnet-group \
     --db-subnet-group-description "Subnet group for PostgreSQL" \
