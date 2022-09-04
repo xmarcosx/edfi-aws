@@ -41,22 +41,6 @@ Throughout the installer, you will be creating resources in AWS. Those resources
 AWS_DEFAULT_REGION=us-east-1;
 ```
 
-View the list of environment variables below as your "scratchpad." As you run through the steps below, you will be asked to store various values as environment variables. Come back up here and update the values.
-```sh
-AWS_VPC_ID="vpc-";
-AWS_PUBLIC_SUBNET="subnet-";
-AWS_PRIVATE_SUBNET_1="subnet-";
-AWS_PRIVATE_SUBNET_2="subnet-";
-AWS_IGW_ID="igw-";
-AWS_ROUTE_TABLE_ID="rtb-";
-AWS_PUBLIC_SECURITY_GROUP="sg-";
-AWS_EC2_INSTANCE_ID="i-";
-AWS_ODS_SECURITY_GROUP="sg-";
-AWS_API_REPOSITORY_URI="XXXXXXX.dkr.ecr.us-east-1.amazonaws.com/edfi-api";
-
-EDFI_ODS_PASSWORD="XXXXXXXXX";
-```
-
 
 ## Networking
 Let's start by creating a new VPC (Virtual Private Cloud), several subnets, and other pieces of networking infrastructure. A VPC is a virtual network dedicated to your AWS account. Within a VPC are one or more subnets. A subnet is a range of IP addresses in your VPC. You launch AWS resources, such as Amazon EC2 instances, into your subnets. You can connect a subnet to the internet, and route traffic to and from your subnets using route tables.
@@ -65,6 +49,7 @@ Let's start by creating a new VPC (Virtual Private Cloud), several subnets, and 
 Copy and paste the command below to create a vpc and automatically store its id in `AWS_VPC_ID`
 ```sh
 AWS_VPC_ID=$(aws ec2 create-vpc --cidr-block 10.0.0.0/16 --query Vpc.VpcId --output text);
+echo $AWS_VPC_ID;
 ```
 
 Note, if you run `echo $AWS_VPC_ID`, you will see the env variable, `AWS_VPC_ID`, has been set to the VPC ID of the newly created VPC.
@@ -75,14 +60,17 @@ You will create three subnets in your VPC. Two will be private and one will be p
 Copy and paste the commands below to create your subnets.
 ```sh
 AWS_PUBLIC_SUBNET=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1a --cidr-block 10.0.0.0/24 --query Subnet.SubnetId --output text);
+echo $AWS_PUBLIC_SUBNET;
 ```
 
 ```sh
 AWS_PRIVATE_SUBNET_1=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1b --cidr-block 10.0.1.0/24 --query Subnet.SubnetId --output text);
+echo $AWS_PRIVATE_SUBNET_1;
 ```
 
 ```sh
 AWS_PRIVATE_SUBNET_2=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1c --cidr-block 10.0.2.0/24 --query Subnet.SubnetId --output text);
+echo $AWS_PRIVATE_SUBNET_1;
 ```
 
 You've created three new subnets which are viewable at the URL below, but at this point they are all private. Let's make one of them public.
@@ -96,6 +84,7 @@ An internet gateway allows communication between your VPC and the internet. It e
 Run the commands below to create an internet gateway and attach it to your VPC.
 ```sh
 AWS_IGW_ID=$(aws ec2 create-internet-gateway --query InternetGateway.InternetGatewayId --output text);
+echo $AWS_IGW_ID;
 ```
 ```sh
 aws ec2 attach-internet-gateway --vpc-id $AWS_VPC_ID --internet-gateway-id $AWS_IGW_ID;
@@ -106,6 +95,7 @@ We are now going to create a route table. A route table contains a set of rules,
 Run the commands below to create a route table, route, associate the route table with the first subnet you created, and finally to configure the subnet to automatically assignn public ip addresses to any resources created in it.
 ```sh
 AWS_ROUTE_TABLE_ID=$(aws ec2 create-route-table --vpc-id $AWS_VPC_ID --query RouteTable.RouteTableId --output text);
+echo $AWS_ROUTE_TABLE_ID;
 ```
 ```sh
 aws ec2 create-route --route-table-id $AWS_ROUTE_TABLE_ID --destination-cidr-block 0.0.0.0/0 --gateway-id $AWS_IGW_ID;
@@ -133,7 +123,6 @@ chmod 400 AwsKeyPair.pem;
 
 We are now going to create a security group. A security group controls the traffic that is allowed to reach and leave the resources that it is associated with. We are going to create a security group that allows access to port 22 when the traffic originates from your public ip address.
 
-Run 
 ```sh
 AWS_PUBLIC_SECURITY_GROUP=$(aws ec2 create-security-group --group-name SSHAccess --description "Security group for SSH access" --vpc-id $AWS_VPC_ID --query GroupId --output text);
 echo $AWS_PUBLIC_SECURITY_GROUP;
@@ -147,17 +136,22 @@ aws ec2 authorize-security-group-ingress \
     --cidr $(curl http://checkip.amazonaws.com)/32;
 ```
 
+
 ```sh
 # create ec2 vm
 # take note of the instance id
-aws ec2 run-instances \
+AWS_EC2_INSTANCE_ID=$(aws ec2 run-instances \
     --image-id ami-a4827dc9 \
     --count 1 \
     --instance-type t2.micro \
     --key-name MyKeyPair \
     --security-group-ids $AWS_PUBLIC_SECURITY_GROUP \
-    --subnet-id $AWS_PUBLIC_SUBNET;
+    --subnet-id $AWS_PUBLIC_SUBNET \
+    --query "Instances[*].InstanceId" --output text);
+echo $AWS_EC2_INSTANCE_ID;
+```
 
+```sh
 # retrieve public ip address
 aws ec2 describe-instances \
     --instance-id $AWS_EC2_INSTANCE_ID \
