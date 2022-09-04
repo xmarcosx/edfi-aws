@@ -82,7 +82,9 @@ AWS_PRIVATE_SUBNET_1=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability
 AWS_PRIVATE_SUBNET_2=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1c --cidr-block 10.0.2.0/24 --query Subnet.SubnetId --output text);
 ```
 
-You've created three new subnets, but at this point they are all private. Let's make one of them public.
+You've created three new subnets which are viewable [here](https://us-east-1.console.aws.amazon.com/vpc/home?region=us-east-1#subnets:) in your AWS console, but at this point they are all private. Let's make one of them public.
+
+https://us-east-1.console.aws.amazon.com/vpc/home?region=us-east-1#subnets:
 
 
 ### Internet gateway
