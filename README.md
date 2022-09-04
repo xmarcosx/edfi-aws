@@ -33,6 +33,7 @@ aws configure;
 * [Networking](#networking)
 * [Jumpbox](#jumpbox)
 * [Amazon RDS](#amazon-rds)
+* [Ed-Fi API](#ed-fi-api)
 
 
 ## Environment variables
@@ -162,13 +163,6 @@ AWS_EC2_INSTANCE_ID=$(aws ec2 run-instances \
 echo $AWS_EC2_INSTANCE_ID;
 ```
 
-<!-- ```sh
-# retrieve public ip address
-aws ec2 describe-instances \
-    --instance-id $AWS_EC2_INSTANCE_ID \
-    --query "Reservations[*].Instances[*].{State:State.Name,Address:PublicIpAddress}";
-``` -->
-
 
 ### Amazon RDS
 We are going to use Aurora PostgreSQL on Amazon RDS for our Ed-Fi ODS. Using a managed service for our ODS is going to provide us with automated backups, automatic minor version upgrades, and flexible compute, memory, and storage.
@@ -178,7 +172,6 @@ Before we create the RDS instance, we are going to create a security group. This
 AWS_ODS_SECURITY_GROUP=$(aws ec2 create-security-group --group-name postgresql-access --description "Security group for PostgreSQL access" --vpc-id $AWS_VPC_ID --query GroupId --output text);
 echo $AWS_ODS_SECURITY_GROUP;
 ```
-
 ```sh
 aws ec2 authorize-security-group-ingress \
     --group-id $AWS_ODS_SECURITY_GROUP \
@@ -187,12 +180,19 @@ aws ec2 authorize-security-group-ingress \
     --source-group $AWS_PUBLIC_SECURITY_GROUP;
 ```
 
+The command below is going to create a subnet group consisting of our two private subnets.
 ```sh
 aws rds create-db-subnet-group \
     --db-subnet-group-name db-subnet-group \
-    --db-subnet-group-description "Subnet group for PostgreSQL" \
+    --db-subnet-group-description "Subnet group for PostgreSQL cluster" \
     --subnet-ids $AWS_PRIVATE_SUBNET_1 $AWS_PRIVATE_SUBNET_2;
+```
 
+You will now create a RDS cluster that uses Amazon's Aurora PostgreSQL as the engine, is compatible with PostgreSQL v11.16, will run in your two private subnets thanks to your subnet group, and uses the password you set below as your postgres user's password.
+```sh
+EDFI_ODS_PASSWORD='XXXXXXXXXXX';
+```
+```sh
 aws rds create-db-cluster \
     --db-cluster-identifier edfi-ods-cluster \
     --engine aurora-postgresql \
@@ -202,7 +202,10 @@ aws rds create-db-cluster \
     --db-subnet-group-name db-subnet-group \
     --backup-retention-period 7 \
     --vpc-security-group-ids $AWS_ODS_SECURITY_GROUP;
+```
 
+This RDS instance is configured to have 2 vCPUs and 4 GB of memory.
+```sh
 aws rds create-db-instance \
     --db-cluster-identifier edfi-ods-cluster \
     --engine aurora-postgresql \
@@ -212,28 +215,66 @@ aws rds create-db-instance \
     --no-multi-az;
 ```
 
-Seeding the ODS
+If you navigate to the URL below, you will see your new instance being created.
+
+https://us-east-1.console.aws.amazon.com/rds/home?region=us-east-1#databases:
+
+
+We are now going to SSH into your VM, connect to your PostgreSQL instance, create the databases listed below, and seed them with data.
+* EdFi_Admin
+* EdFi_Security
+* EdFi_Ods_2021
+* EdFi_Ods_2022
+* EdFi_Ods_2023
+
+Run the command below and take note of the public ip address of your VM.
 ```sh
-# connect via ssh
+aws ec2 describe-instances \
+    --instance-id $AWS_EC2_INSTANCE_ID \
+    --query "Reservations[*].Instances[*].{State:State.Name,Address:PublicIpAddress}";
+```
+
+Run the command below and take note of your RDS instance's endpoint.
+```sh
+aws rds describe-db-instances \
+    --db-instance-identifier edfi-ods \
+    --region $AWS_DEFAULT_REGION \
+    --query "DBInstances[*].Endpoint.Address" --output text;
+```
+
+Run the command below to SSH into your VM. Since this is the first time you're connecting to it, you will be asked if you're sure you'd like to connect. Enter yes and hit enter.
+```sh
 ssh -i "AwsKeyPair.pem" ec2-user@XXX.XXX.XXX.XXX;
+```
 
-# install psql and git
+Run the command below to install a few pre-requisites.
+```sh
 sudo yum install postgresql git;
+```
 
-# clone this git repo to vm
+Clone this repo to your VM so you have access to the scripts we need to run.
+```sh
 git clone https://github.com/xmarcosx/edfi-aws.git;
+```
 
-# download and import ed-fi db templates
+`cd` into the folder and download the database backups from the Ed-Fi Alliance's Azure Artifacts repository.
+```sh
 cd edfi-aws;
 bash init.sh;
+```
 
-# PostgreSQL full server name example: edfi-ods.XXXXXX.us-east-1.rds.amazonaws.com
-bash import-ods-data.sh <POSTGRESPASSWORD> <POSTGRESQL FULL SERVER NAME> # DEV TODO: replace with postgres password
+Run the command below to seed your databases. Be sure to replace the brackets with your values!
+```sh
+# ie. bash import-ods-data.sh SuperSecret edfi-ods.XXXXX.us-east-1.rds.amazonaws.com
+bash import-ods-data.sh <POSTGRES PASSWORD> <RDS ENDPOINT ADDRESS>
+```
 
-# shutdown vm
+Go ahead and shutdown your VM to reduce billing charges.
+```
 sudo shutdown -H now;
 ```
 
+### Ed-Fi API
 Push Docker image to ECR
 ```sh
 # note repository uri and save to AWS_API_REPOSITORY_URI
