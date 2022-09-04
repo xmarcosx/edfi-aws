@@ -59,17 +59,29 @@ You will create three subnets in your VPC. Two will be private and one will be p
 
 Copy and paste the commands below to create your subnets.
 ```sh
-AWS_PUBLIC_SUBNET=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1a --cidr-block 10.0.0.0/24 --query Subnet.SubnetId --output text);
+AWS_PUBLIC_SUBNET=$(aws ec2 create-subnet \
+    --vpc-id $AWS_VPC_ID \
+    --availability-zone us-east-1a \
+    --cidr-block 10.0.0.0/24 \
+    --query Subnet.SubnetId --output text);
 echo $AWS_PUBLIC_SUBNET;
 ```
 
 ```sh
-AWS_PRIVATE_SUBNET_1=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1b --cidr-block 10.0.1.0/24 --query Subnet.SubnetId --output text);
+AWS_PRIVATE_SUBNET_1=$(aws ec2 create-subnet \
+    --vpc-id $AWS_VPC_ID \
+    --availability-zone us-east-1b \
+    --cidr-block 10.0.1.0/24 \
+    --query Subnet.SubnetId --output text);
 echo $AWS_PRIVATE_SUBNET_1;
 ```
 
 ```sh
-AWS_PRIVATE_SUBNET_2=$(aws ec2 create-subnet --vpc-id $AWS_VPC_ID --availability-zone us-east-1c --cidr-block 10.0.2.0/24 --query Subnet.SubnetId --output text);
+AWS_PRIVATE_SUBNET_2=$(aws ec2 create-subnet \
+    --vpc-id $AWS_VPC_ID \
+    --availability-zone us-east-1c \
+    --cidr-block 10.0.2.0/24 \
+    --query Subnet.SubnetId --output text);
 echo $AWS_PRIVATE_SUBNET_1;
 ```
 
