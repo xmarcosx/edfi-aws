@@ -179,6 +179,19 @@ aws ec2 authorize-security-group-ingress \
     --port 5432 \
     --source-group $AWS_PUBLIC_SECURITY_GROUP;
 ```
+```sh
+AWS_DEFAULT_SECURITY_GROUP=$(aws ec2 describe-security-groups \
+    --filters Name=vpc-id,Values=$AWS_VPC_ID Name=group-name,Values=default \
+    --query "SecurityGroups[*].GroupId" --output text);
+echo $AWS_DEFAULT_SECURITY_GROUP;
+```
+```sh
+aws ec2 authorize-security-group-ingress \
+    --group-id $AWS_ODS_SECURITY_GROUP \
+    --protocol tcp \
+    --port 5432 \
+    --source-group $AWS_DEFAULT_SECURITY_GROUP;
+```
 
 The command below is going to create a subnet group consisting of our two private subnets.
 ```sh
@@ -278,9 +291,11 @@ You have successfully deployed your Ed-Fi ODS! Let's move on to the Ed-Fi API.
 
 
 ### Ed-Fi API
+We are going to use AWS App Runner for the Ed-Fi API. AWS App Runner is a fully managed service used to deploy containerized web applications and APIs. We can provide App Runner with a containter image and it will deploy it automatically, load balance traffic with encryption, scale to meet traffic needs, and communicate with other AWS services and applications that run in a private Amazon VPC.
 
+Before we can create the App Runner application, we need a container image. We can going to build an image and push it to Elastic Container Registry (ECR), a container registry.
 
-Push Docker image to ECR
+Run the command below to create a repository.
 ```sh
 AWS_API_REPOSITORY_URI=$(aws ecr create-repository \
     --repository-name edfi-api \
@@ -290,21 +305,52 @@ AWS_API_REPOSITORY_URI=$(aws ecr create-repository \
 echo $AWS_API_REPOSITORY_URI;
 ```
 
-From within your `edfi-aws` folder.
+From within your `edfi-aws` folder. Run the command to build a Docker image.
 ```sh
 docker build -t edfi-api edfi-api/.;
 ```
+
+Run the command below to log into ECR.
 ```sh
-aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin XXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com;
+aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_API_REPOSITORY_URI;
 ```
+
+Tag your image with your ECR repository URL.
 ```sh
 docker tag edfi-api:latest $AWS_API_REPOSITORY_URI;
 ```
+
+Push the image to ECR.
 ```sh
 docker push $AWS_API_REPOSITORY_URI;
 ```
 
-Ed-Fi Web API on App Runner
-```sh
-aws apprunner create-service --cli-input-json file://api.json;
-```
+Head to https://us-east-1.console.aws.amazon.com/apprunner/home?region=us-east-1#/welcome
+
+* Click *Create an App Runner service*
+* **Repository type:** Container registry
+* **Provider:** Amazon ECR
+* **Container image URI:** Click *Browse* and select:
+    * **Image repository:** edfi-api
+    * **Image tag:** latest
+* **Deployment trigger:** Manual
+* Select *Create new service role*
+* Click *Next*
+
+Next screen:
+* **Service name:** edfi-api
+* **Virtual CPU & memory:** 2 vCPUs and 4 GB memory
+* Add two environment variables
+    * **Variable key:** DB_HOST
+        * Set the value to your ODS endpoint
+    * **Variable key:** DB_PASS
+        * Set the value to your postgres user password
+* **Port:** 80
+* **Networking:** Custom VPC
+    * **VPC connector name:** vpc-connector
+    * **VPC:** Select the VPC you created earlier
+    * **Subnets:** Select all subnets
+    * **Security groups:** Select your default security group
+    * Click *Add*
+* Click *Next*
+* Click *Create and deploy*
