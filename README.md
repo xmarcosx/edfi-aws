@@ -325,32 +325,112 @@ Push the image to ECR.
 docker push $AWS_API_REPOSITORY_URI;
 ```
 
-Head to https://us-east-1.console.aws.amazon.com/apprunner/home?region=us-east-1#/welcome
+You have successfully created a Docker image of the Ed-Fi API and pushed it to your AWS ECS repository. We are now going to deploy an App Runner service using that image. Head to https://us-east-1.console.aws.amazon.com/apprunner/home?region=us-east-1#/welcome
 
-* Click *Create an App Runner service*
+Click *Create an App Runner service*
+
+**Source**
 * **Repository type:** Container registry
 * **Provider:** Amazon ECR
 * **Container image URI:** Click *Browse* and select:
     * **Image repository:** edfi-api
     * **Image tag:** latest
+    * Click *Continue*
+
+**Deployment settings**
 * **Deployment trigger:** Manual
 * Select *Create new service role*
 * Click *Next*
 
-Next screen:
+**Service settings**
 * **Service name:** edfi-api
 * **Virtual CPU & memory:** 2 vCPUs and 4 GB memory
 * Add two environment variables
-    * **Variable key:** DB_HOST
+    * **Key:** DB_HOST
         * Set the value to your ODS endpoint
-    * **Variable key:** DB_PASS
+    * **Key:** DB_PASS
         * Set the value to your postgres user password
 * **Port:** 80
-* **Networking:** Custom VPC
+
+**Networking**
+* **Outgoing network traffic:** Custom VPC
+    * Click *Add new*
     * **VPC connector name:** vpc-connector
     * **VPC:** Select the VPC you created earlier
     * **Subnets:** Select all subnets
     * **Security groups:** Select your default security group
     * Click *Add*
 * Click *Next*
-* Click *Create and deploy*
+* Click *Create & deploy*
+
+
+### Ed-Fi Admin App
+We are going to use AWS App Runner for the Ed-Fi Admin App.
+
+Run the command below to create a repository.
+```sh
+AWS_ADMIN_APP_REPOSITORY_URI=$(aws ecr create-repository \
+    --repository-name edfi-admin-app \
+    --image-scanning-configuration scanOnPush=true \
+    --region $AWS_DEFAULT_REGION \
+    --query "repository.repositoryUri" --output text);
+echo $AWS_ADMIN_APP_REPOSITORY_URI;
+```
+
+From within your `edfi-aws` folder. Run the command to build a Docker image.
+```sh
+docker build -t edfi-admin-app edfi-admin-app/.;
+```
+
+Run the command below to log into ECR.
+```sh
+aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ADMIN_APP_REPOSITORY_URI;
+```
+
+Tag your image with your ECR repository URL.
+```sh
+docker tag edfi-admin-app:latest $AWS_ADMIN_APP_REPOSITORY_URI;
+```
+
+Push the image to ECR.
+```sh
+docker push $AWS_ADMIN_APP_REPOSITORY_URI;
+```
+
+You have successfully created a Docker image of the Ed-Fi Admin App and pushed it to your AWS ECS repository. We are now going to deploy an App Runner service using that image. Head to https://us-east-1.console.aws.amazon.com/apprunner/home?region=us-east-1#/welcome
+
+Click *Create service*
+
+**Source**
+* **Repository type:** Container registry
+* **Provider:** Amazon ECR
+* **Container image URI:** Click *Browse* and select:
+    * **Image repository:** edfi-admin-app
+    * **Image tag:** latest
+    * Click *Continue*
+
+**Deployment settings**
+* **Deployment trigger:** Manual
+* Select *Use existing service role*
+* Select the role from the dropdown
+* Click *Next*
+
+**Service settings**
+* **Service name:** edfi-admin-app
+* **Virtual CPU & memory:** 1 vCPUs and 2 GB memory
+* Add two environment variables
+    * **Key:** API_URL
+        * Set the value to your Ed-Fi API base url (ie. https://XXXXXXX.us-east-1.awsapprunner.com)
+    * **Key:** ENCRYPTION_KEY
+        * Set the value to the output of this command: `/usr/bin/openssl rand -base64 32`
+    * **Key:** DB_HOST
+        * Set the value to your ODS endpoint
+    * **Key:** DB_PASS
+        * Set the value to your postgres user password
+* **Port:** 80
+
+**Networking**
+* **Outgoing network traffic:** Custom VPC
+* Select the VPC connector created when you deployed the Ed-Fi API
+* Click *Next*
+* Click *Create & deploy*

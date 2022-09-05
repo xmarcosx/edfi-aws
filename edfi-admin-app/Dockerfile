@@ -12,6 +12,11 @@ WORKDIR /app
 COPY appsettings.template.json /app/appsettings.template.json
 COPY run.sh /app/run.sh
 COPY log4net.config /app/log4net.txt
+COPY global.pem /usr/local/share/ca-certificates/my-cert.crt
+
+RUN cat /usr/local/share/ca-certificates/my-cert.crt >> /etc/ssl/certs/ca-certificates.crt && \
+    apk --no-cache add \
+        curl
 
 RUN apk add unzip dos2unix bash gettext postgresql-client && \
     wget -O /app/AdminApp.zip  https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_apis/packaging/feeds/EdFi/nuget/packages/EdFi.Suite3.ODS.AdminApp.Web/versions/${VERSION}/content && \
