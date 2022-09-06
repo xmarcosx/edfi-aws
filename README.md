@@ -357,7 +357,7 @@ Click *Create an App Runner service*
     * Click *Add new*
     * **VPC connector name:** vpc-connector
     * **VPC:** Select the VPC you created earlier
-    * **Subnets:** Select all subnets
+    * **Subnets:** Select your two private subnets (10.0.1.0/24 and 10.0.2.0/24)
     * **Security groups:** Select your default security group
     * Click *Add*
 * Click *Next*
